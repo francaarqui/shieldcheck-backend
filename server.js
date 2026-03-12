@@ -90,6 +90,9 @@ app.post('/api/webhook/stripe', express.raw({ type: 'application/json' }), async
 // Middleware Global de JSON para as outras rotas
 app.use(express.json());
 
+// Middleware para formulários URL-encoded (necessário para webhooks do Twilio)
+app.use(express.urlencoded({ extended: false }));
+
 // Middleware de Autenticação
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -864,4 +867,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`ShieldCheck AI Backend rodando na porta ${PORT} com Supabase`);
 });
-
