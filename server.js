@@ -42,8 +42,10 @@ const app = express();
 
 const allowedOrigins = [
     'http://localhost:5173',
-    'https://shieldcheck-ai.vercel.app', // Altere para seu domínio real da Vercel
-    'https://shieldcheck.com.br'
+    'https://shieldcheck-ai.vercel.app',
+    'https://shieldcheck-frontend-8bta.vercel.app',
+    'https://www.shieldcheckai.com',
+    'https://shieldcheckai.com'
 ];
 
 app.use(cors({
