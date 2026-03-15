@@ -1,0 +1,148 @@
+const express = require('express');
+const router = express.Router();
+const fs = require('fs');
+const { analyzeContent, transcribeMedia, analyzeImage } = require('../utils/analyzer');
+
+module.exports = function (supabase, openai, downloadWhatsAppMedia, sendWhatsAppReply) {
+
+    // Helper to find user and check quota
+    const getWhatsAppUser = async (phoneNumber) => {
+        // Twilio sends "whatsapp:+55..."
+        const cleanNumber = phoneNumber.replace('whatsapp:', '');
+
+        const { data: user } = await supabase
+            .from('users')
+            .select('*')
+            .eq('whatsapp_number', cleanNumber)
+            .single();
+
+        return user;
+    };
+
+    const checkWhatsAppQuota = async (user) => {
+        if (!user) return true; // Anonymous is handled separately or blocked
+        if (user.plan !== 'FREE') return true;
+
+        const today = new Date().toISOString().split('T')[0];
+        const { count } = await supabase
+            .from('reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .gte('timestamp', today);
+
+        return count < 3;
+    };
+
+    // POST /api/whatsapp/webhook
+    router.post('/webhook', async (req, res) => {
+        const From = req.body.From || req.body.from;
+        const Body = req.body.Body || req.body.text || req.body.body;
+        const NumMedia = parseInt(req.body.NumMedia || req.body.numMedia || (req.body.media ? 1 : 0));
+        const MediaUrl0 = req.body.MediaUrl0 || req.body.mediaUrl0 || req.body.media;
+        const MediaContentType0 = req.body.MediaContentType0 || req.body.mediaContentType0 || req.body.contentType;
+
+        console.log(`📱 [WHATSAPP IN] De: ${From} | Mensagem: ${Body || '[Mídia]'}`);
+
+        try {
+            // 1. Find User
+            const user = await getWhatsAppUser(From);
+
+            // 2. Check Quota
+            const hasQuota = await checkWhatsAppQuota(user);
+            if (!hasQuota) {
+                return await sendWhatsAppReply(From, "⚠️ Você atingiu seu limite diário de 3 análises gratuitas. Considere assinar o plano Premium para uso ilimitado!");
+            }
+
+            let analysisResult = null;
+            let transcribedText = null;
+            let finalType = 'text';
+
+            // 3. Process Content
+            if (NumMedia > 0) {
+                const mediaUrl = MediaUrl0;
+                const contentType = MediaContentType0;
+
+                // Limpar extensão (remover parâmetros como ;codecs=opus)
+                let extension = 'bin';
+                if (contentType.includes('audio/')) extension = 'ogg'; // WhatsApp padrão
+                else if (contentType.includes('image/')) extension = contentType.split('/')[1].split(';')[0] || 'jpg';
+
+                const filename = `wa_media_${Date.now()}.${extension}`;
+                console.log(`📥 [WHATSAPP MEDIA] Tipo: ${contentType} | Baixando: ${filename}`);
+
+                try {
+                    const filePath = await downloadWhatsAppMedia(mediaUrl, filename);
+                    console.log(`📁 [WHATSAPP MEDIA] Arquivo salvo em: ${filePath}`);
+
+                    if (contentType.startsWith('audio/')) {
+                        console.log("🎙️ Whisper: Transcrevendo áudio...");
+                        transcribedText = await transcribeMedia(openai, filePath);
+                        console.log(`📝 [WHATSAPP MEDIA] Transcrição: ${transcribedText}`);
+
+                        analysisResult = await analyzeContent(openai, transcribedText, 'audio');
+                        finalType = 'audio';
+                    } else if (contentType.startsWith('image/')) {
+                        console.log("📸 Vision: Analisando imagem...");
+                        analysisResult = await analyzeImage(openai, filePath);
+                        finalType = 'image';
+                    }
+
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        console.log(`🗑️ [WHATSAPP MEDIA] Temp file removed.`);
+                    }
+                } catch (mediaErr) {
+                    console.error("❌ [WHATSAPP MEDIA] Falha no processamento de mídia:", mediaErr);
+                    await sendWhatsAppReply(From, "⚠️ Tive um problema ao baixar seu arquivo. Verifique se o arquivo não é muito grande ou tente enviar novamente.");
+                }
+            } else if (Body) {
+                console.log("💬 ChatGPT: Analisando texto...");
+                analysisResult = await analyzeContent(openai, Body, 'text');
+                finalType = 'text';
+            }
+
+            // 4. Save History & Send Reply
+            if (analysisResult) {
+                // Save to DB
+                await supabase.from('reports').insert([{
+                    user_id: user ? user.id : null,
+                    content: transcribedText || Body || "[Mídia]",
+                    type: finalType,
+                    risk_score: analysisResult.score
+                }]);
+
+                // Format Reply
+                let reply = `*🛡️ Análise do ShieldCheck AI*\n\n`;
+
+                const scoreIcon = analysisResult.score > 60 ? '🔴' : analysisResult.score > 30 ? '🟡' : '🟢';
+                reply += `${scoreIcon} *Status:* ${analysisResult.status}\n`;
+                reply += `📊 *Nível de Risco:* ${analysisResult.score}%\n\n`;
+
+                if (transcribedText) {
+                    reply += `📝 *Transcrição:* _"${transcribedText}"_\n\n`;
+                }
+
+                reply += `🔍 *Sinais detectados:*\n`;
+                analysisResult.signals.forEach(sig => {
+                    reply += `• ${sig}\n`;
+                });
+
+                reply += `\n💡 *Recomendação:* ${analysisResult.recommendation}`;
+                reply += `\n\n---`;
+                reply += `\n🛡️ _Protegido por ShieldCheck.ai_`;
+
+                await sendWhatsAppReply(From, reply);
+            } else if (!Body && NumMedia === 0) {
+                await sendWhatsAppReply(From, "👋 Olá! Eu sou o assistente do ShieldCheck AI. Me envie um texto, áudio ou print suspecto para que eu possa analisar para você.");
+            }
+
+        } catch (error) {
+            console.error("WhatsApp Webhook Error:", error);
+            await sendWhatsAppReply(From, "⚠️ Desculpe, tive um problema ao analisar sua mensagem. Tente novamente em instantes.");
+        }
+
+        res.type('text/xml').send('<Response></Response>');
+    });
+
+    return router;
+};
