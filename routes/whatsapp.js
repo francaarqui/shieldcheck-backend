@@ -116,8 +116,7 @@ module.exports = function (supabase, openai, downloadWhatsAppMedia, sendWhatsApp
                 }]);
 
                 const botNumber = (req.body.To || "").replace('whatsapp:', '');
-                const shareText = encodeURIComponent(`🛡️ Olá! Recomendo usar o ShieldCheck AI para analisar links, áudios e prints suspeitos. É grátis e me ajuda muito!`);
-                const shareLink = botNumber ? `https://wa.me/${botNumber}?text=${shareText}` : 'https://shieldcheckai.com';
+                const shareLink = 'https://shieldcheckai.com/proteger';
 
                 // Format Reply
                 const score = analysisResult.score;
