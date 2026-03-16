@@ -49,13 +49,17 @@ module.exports = function (supabase, openai, downloadWhatsAppMedia, sendWhatsApp
 
             // 2. Check Quota
             const hasQuota = await checkWhatsAppQuota(user);
+            const cleanNumber = From.replace('whatsapp:', '');
+            const salesLink = `https://shieldcheckai.com/plans?auto=solo_bot&wa=${cleanNumber}`;
+
             if (!hasQuota) {
-                return await sendWhatsAppReply(From, "⚠️ Você atingiu seu limite diário de 3 análises gratuitas. Considere assinar o plano Premium para uso ilimitado!");
+                return await sendWhatsAppReply(From, `⚠️ Você atingiu seu limite diário de 3 análises gratuitas.\n\n🚀 *QUER USO ILIMITADO?*\nAssine o plano Solo Bot e proteja-se sem limites:\n${salesLink}`);
             }
 
             let analysisResult = null;
             let transcribedText = null;
             let finalType = 'text';
+
 
             // 3. Process Content
             if (NumMedia > 0) {
@@ -143,6 +147,15 @@ module.exports = function (supabase, openai, downloadWhatsAppMedia, sendWhatsApp
                 reply += `\n💡 *RECOMENDAÇÃO:* ${analysisResult.recommendation}\n\n`;
 
                 reply += `*================================*\n`;
+
+                // Add Upgrade link for FREE users
+                if (!user || user.plan === 'FREE') {
+                    reply += `🚀 *QUER USO ILIMITADO?*\n`;
+                    reply += `Assine o plano Solo Bot e proteja-se sem limites:\n`;
+                    reply += `${salesLink}\n\n`;
+                    reply += `*================================*\n`;
+                }
+
                 reply += `📢 *CAMPANHA ANTI-GOLPE:* Proteja seus amigos e familiares! Encaminhe este alerta para seus grupos.\n\n`;
                 reply += `👤 *INDIQUE O BOT:* Toque no link abaixo para compartilhar com um colega:\n`;
                 reply += `${shareLink}\n\n`;

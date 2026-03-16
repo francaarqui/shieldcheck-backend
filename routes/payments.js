@@ -5,7 +5,7 @@ module.exports = function (stripe, authenticateToken) {
 
     // POST /api/create-checkout-session
     router.post('/create-checkout-session', authenticateToken, async (req, res) => {
-        const { planId, planName } = req.body;
+        const { planId, planName, waNumber } = req.body;
         const userId = req.user.id;
 
         const priceMap = {
@@ -60,7 +60,7 @@ module.exports = function (stripe, authenticateToken) {
                 payment_method_types: ['card'],
                 line_items: [{ price: priceId, quantity: 1 }],
                 client_reference_id: userId,
-                metadata: { userId },
+                metadata: { userId, waNumber },
                 success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}&plan=${planName || 'PREMIUM'}`,
                 cancel_url: `${baseUrl}/plans`, // Voltando para planos se cancelar
             };
@@ -68,11 +68,11 @@ module.exports = function (stripe, authenticateToken) {
             if (trialDays > 0) {
                 sessionOptions.subscription_data = {
                     trial_period_days: trialDays,
-                    metadata: { userId }
+                    metadata: { userId, waNumber }
                 };
             } else {
                 sessionOptions.subscription_data = {
-                    metadata: { userId }
+                    metadata: { userId, waNumber }
                 };
             }
 

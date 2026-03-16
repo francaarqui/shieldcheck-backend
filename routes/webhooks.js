@@ -22,12 +22,20 @@ module.exports = function (supabase, stripe, STRIPE_WEBHOOK_SECRET) {
         if (event.type === 'checkout.session.completed') {
             const session = event.data.object;
             const userId = session.client_reference_id;
-            console.log(`💰 Checkout concluído! Usuário ${userId}.`);
+            const waNumber = session.metadata?.waNumber;
+
+            console.log(`💰 Checkout concluído! Usuário ${userId}. WA: ${waNumber || 'N/A'}`);
+
+            if (userId && waNumber) {
+                console.log(`📱 Vinculando WhatsApp ${waNumber} ao usuário ${userId}`);
+                await supabase.from('users').update({ whatsapp_number: waNumber }).eq('id', userId);
+            }
         }
 
         if (event.type === 'customer.subscription.created' || event.type === 'customer.subscription.updated') {
             const subscription = event.data.object;
             const userId = subscription.metadata.userId;
+            const waNumber = subscription.metadata.waNumber;
 
             if (userId) {
                 const status = subscription.status;
@@ -39,8 +47,11 @@ module.exports = function (supabase, stripe, STRIPE_WEBHOOK_SECRET) {
                 else if (priceId === process.env.STRIPE_PRICE_STARTER_MONTHLY || priceId === process.env.STRIPE_PRICE_STARTER_YEARLY) planName = 'BUSINESS';
                 else if (priceId === process.env.STRIPE_PRICE_PRO_MONTHLY || priceId === process.env.STRIPE_PRICE_PRO_YEARLY) planName = 'PRO';
 
+                const updateData = { plan: planName };
+                if (waNumber) updateData.whatsapp_number = waNumber;
+
                 if (status === 'active' || status === 'trialing') {
-                    await supabase.from('users').update({ plan: planName }).eq('id', userId);
+                    await supabase.from('users').update(updateData).eq('id', userId);
                 } else if (status === 'past_due' || status === 'unpaid' || status === 'canceled') {
                     await supabase.from('users').update({ plan: 'FREE' }).eq('id', userId);
                 }
