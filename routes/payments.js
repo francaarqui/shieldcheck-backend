@@ -20,11 +20,31 @@ module.exports = function (stripe, authenticateToken) {
         };
 
         const priceId = priceMap[planId];
-        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+        // Detectar a origem da requisição
+        const origin = req.get('origin');
+
+        // Determinar o baseUrl de retorno de forma ultra-segura
+        let baseUrl = process.env.FRONTEND_URL;
+
+        if (!baseUrl) {
+            // Se houver um origin válido (vinda do browser), usamos ele como base
+            if (origin) {
+                baseUrl = origin;
+            } else if (process.env.NODE_ENV === 'production') {
+                baseUrl = 'https://www.shieldcheckai.com';
+            } else {
+                baseUrl = 'http://localhost:5173';
+            }
+        }
+
+        // Remover barra final se existir para evitar URLs duplas //
+        if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
 
         console.log(`[PAYMENT DEBUG] Requested planId: ${planId}`);
-        console.log(`[PAYMENT DEBUG] baseUrl: ${baseUrl}`);
-        console.log(`[PAYMENT DEBUG] Resolved priceId: ${priceId}`);
+        console.log(`[PAYMENT DEBUG] Environment: ${process.env.NODE_ENV}`);
+        console.log(`[PAYMENT DEBUG] Origin detected: ${origin}`);
+        console.log(`[PAYMENT DEBUG] Final baseUrl for return: ${baseUrl}`);
 
         if (!priceId) {
             console.error(`❌ [PAYMENT ERROR]: Price ID not found for planId: ${planId}`);
@@ -42,7 +62,7 @@ module.exports = function (stripe, authenticateToken) {
                 client_reference_id: userId,
                 metadata: { userId },
                 success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}&plan=${planName || 'PREMIUM'}`,
-                cancel_url: `${baseUrl}/dashboard`,
+                cancel_url: `${baseUrl}/plans`, // Voltando para planos se cancelar
             };
 
             if (trialDays > 0) {
@@ -57,8 +77,8 @@ module.exports = function (stripe, authenticateToken) {
             }
 
             const session = await stripe.checkout.sessions.create(sessionOptions);
-            console.log(`✅ [PAYMENT SUCCESS] Session created: ${session.id}`);
-            res.json({ url: session.url });
+            console.log(`✅ [PAYMENT SUCCESS] Session created: ${session.id} | Return to: ${baseUrl}`);
+            res.json({ url: session.url, debug_baseUrl: baseUrl });
         } catch (error) {
             console.error('❌ [STRIPE ERROR]:', error.message);
             res.status(500).json({

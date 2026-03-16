@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const { analyzeContent } = require('../utils/analyzer');
 
-module.exports = function (supabase, authenticateToken) {
+module.exports = function (supabase, authenticateToken, openai) {
 
     // GET /api/developer/key
     router.get('/developer/key', authenticateToken, async (req, res) => {
@@ -95,7 +96,25 @@ module.exports = function (supabase, authenticateToken) {
 
         // We probably need simple analyzeContent helper here or import it
         // For now, let's assume it's passed or defined here
-        res.json({ success: true, provider: "ShieldCheck AI B2B", message: "Análise processada." });
+        try {
+            const analysisResult = await analyzeContent(openai, content, type || 'text');
+
+            // Log as a report if we have user_id
+            await supabase.from('reports').insert([{
+                user_id: row.user_id,
+                content: content.substring(0, 500),
+                type: type || 'b2b_api',
+                risk_score: analysisResult.score
+            }]);
+
+            res.json({
+                success: true,
+                provider: "ShieldCheck AI B2B",
+                analysis: analysisResult
+            });
+        } catch (err) {
+            res.status(500).json({ error: 'Erro ao processar análise via motor ShieldCheck.' });
+        }
     });
 
     // Public endpoint to verify store status (Phase 6)

@@ -9,6 +9,7 @@ const OpenAI = require('openai');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
+const { Resend } = require('resend');
 
 dotenv.config();
 
@@ -20,6 +21,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
 const stripe = Stripe(STRIPE_SECRET_KEY);
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -50,9 +53,18 @@ const allowedOrigins = [
 
 app.use(cors({
     origin: function (origin, callback) {
-        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+        // Permitir se não houver origin (ex: mobile apps, ferramentas de debug)
+        if (!origin) return callback(null, true);
+
+        const isAllowed = allowedOrigins.indexOf(origin) !== -1 ||
+            origin.includes('.vercel.app') ||
+            origin.startsWith('http://192.168.') ||
+            origin.startsWith('http://localhost:');
+
+        if (isAllowed) {
             callback(null, true);
         } else {
+            console.warn(`[CORS BLOQUEADO]: ${origin}`);
             callback(new Error('Interditado pelo CORS'));
         }
     },
@@ -125,6 +137,7 @@ const downloadWhatsAppMedia = async (url, filename) => {
 
 const sendWhatsAppReply = async (to, message) => {
     try {
+        console.log(`[DEBUG] Enviando WhatsApp para ${to}:\n${message}`);
         await twilioClient.messages.create({
             from: process.env.TWILIO_PHONE,
             to: to,
@@ -144,10 +157,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 // --- Modular Routes ---
-const authRoutes = require('./routes/auth')(supabase, JWT_SECRET, authenticateToken);
+const authRoutes = require('./routes/auth')(supabase, JWT_SECRET, authenticateToken, resend);
 const analyzeRoutes = require('./routes/analyze')(supabase, openai, optionalAuthenticateToken, checkQuota, upload);
 const intelligenceRoutes = require('./routes/intelligence')(supabase, authenticateToken);
-const b2bRoutes = require('./routes/b2b')(supabase, authenticateToken);
+const b2bRoutes = require('./routes/b2b')(supabase, authenticateToken, openai);
 const familyRoutes = require('./routes/family')(supabase, authenticateToken);
 const extensionRoutes = require('./routes/extension')(supabase, optionalAuthenticateToken);
 const paymentRoutes = require('./routes/payments')(stripe, authenticateToken);

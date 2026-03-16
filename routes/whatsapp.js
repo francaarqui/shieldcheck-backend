@@ -111,25 +111,42 @@ module.exports = function (supabase, openai, downloadWhatsAppMedia, sendWhatsApp
                     risk_score: analysisResult.score
                 }]);
 
-                // Format Reply
-                let reply = `*🛡️ Análise do ShieldCheck AI*\n\n`;
+                const botNumber = (req.body.To || "").replace('whatsapp:', '');
+                const shareText = encodeURIComponent(`🛡️ Olá! Recomendo usar o ShieldCheck AI para analisar links, áudios e prints suspeitos. É grátis e me ajuda muito!`);
+                const shareLink = botNumber ? `https://wa.me/${botNumber}?text=${shareText}` : 'https://shieldcheckai.com';
 
-                const scoreIcon = analysisResult.score > 60 ? '🔴' : analysisResult.score > 30 ? '🟡' : '🟢';
-                reply += `${scoreIcon} *Status:* ${analysisResult.status}\n`;
-                reply += `📊 *Nível de Risco:* ${analysisResult.score}%\n\n`;
+                // Format Reply
+                const score = analysisResult.score;
+                const scoreChar = score > 60 ? '🔴' : score > 30 ? '🟡' : '🟢';
+
+                // Premium visual risk bar
+                const totalBlocks = 8;
+                const filledBlocks = Math.round((score / 100) * totalBlocks);
+                const barEmoji = score > 60 ? '🟥' : score > 30 ? '🟨' : '🟩';
+                const riskLine = Array(filledBlocks).fill(barEmoji).join('') + Array(totalBlocks - filledBlocks).fill('⬜').join('');
+
+                let reply = `*🛡️ RELATÓRIO DE SEGURANÇA SHIELDCHECK*\n`;
+                reply += `*================================*\n\n`;
+
+                reply += `${scoreChar} *STATUS:* ${analysisResult.status.toUpperCase()}\n`;
+                reply += `📊 *NÍVEL DE RISCO:* [ ${riskLine} ] *${score}%*\n\n`;
 
                 if (transcribedText) {
-                    reply += `📝 *Transcrição:* _"${transcribedText}"_\n\n`;
+                    reply += `📝 *CONTEÚDO ANALISADO:*\n_"${transcribedText}"_\n\n`;
                 }
 
-                reply += `🔍 *Sinais detectados:*\n`;
+                reply += `🔍 *SINAIS DETECTADOS:*\n`;
                 analysisResult.signals.forEach(sig => {
-                    reply += `• ${sig}\n`;
+                    reply += `  • ${sig}\n`;
                 });
 
-                reply += `\n💡 *Recomendação:* ${analysisResult.recommendation}`;
-                reply += `\n\n---`;
-                reply += `\n🛡️ _Protegido por ShieldCheck.ai_`;
+                reply += `\n💡 *RECOMENDAÇÃO:* ${analysisResult.recommendation}\n\n`;
+
+                reply += `*================================*\n`;
+                reply += `📢 *CAMPANHA ANTI-GOLPE:* Proteja seus amigos e familiares! Encaminhe este alerta para seus grupos.\n\n`;
+                reply += `👤 *INDIQUE O BOT:* Toque no link abaixo para compartilhar com um colega:\n`;
+                reply += `${shareLink}\n\n`;
+                reply += `🛡️ _Protegido por ShieldCheck AI_`;
 
                 await sendWhatsAppReply(From, reply);
             } else if (!Body && NumMedia === 0) {

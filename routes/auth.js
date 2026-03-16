@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const { authenticator } = require('otplib');
 const qrcode = require('qrcode');
 
-module.exports = function (supabase, JWT_SECRET, authenticateToken) {
+module.exports = function (supabase, JWT_SECRET, authenticateToken, resend) {
 
     // POST /api/register
     router.post('/register', async (req, res) => {
@@ -171,6 +171,92 @@ module.exports = function (supabase, JWT_SECRET, authenticateToken) {
 
         if (error) return res.status(500).json({ error: 'Erro ao atualizar configurações.' });
         res.json({ message: 'Configurações atualizadas com sucesso.' });
+    });
+
+    // POST /api/forgot-password
+    router.post('/forgot-password', async (req, res) => {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'E-mail é obrigatório.' });
+
+        try {
+            const { data: user, error } = await supabase
+                .from('users')
+                .select('id, name')
+                .eq('email', email)
+                .single();
+
+            if (error || !user) {
+                // For security, don't reveal if user exists
+                return res.json({ message: 'Se o e-mail estiver cadastrado, você receberá um link de recuperação em breve.' });
+            }
+
+            const resetToken = jwt.sign({ id: user.id, purpose: 'password_reset' }, JWT_SECRET, { expiresIn: '1h' });
+
+            // Determinar a URL do site (produção ou local)
+            const origin = req.get('origin') || 'https://www.shieldcheckai.com';
+            const resetLink = `${origin}/reset-password/${resetToken}`;
+
+            const { data, error: emailError } = await resend.emails.send({
+                from: 'ShieldCheck AI <suporte@shieldcheckai.com>',
+                to: [email],
+                subject: 'Recuperação de Senha - ShieldCheck AI',
+                html: `
+                    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #334155;">
+                        <h1 style="color: #4f46e5;">Recuperação de Senha</h1>
+                        <p>Olá, <strong>${user.name}</strong>!</p>
+                        <p>Recebemos uma solicitação para redefinir sua senha no ShieldCheck AI. Clique no botão abaixo para escolher uma nova senha:</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="${resetLink}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Redefinir Minha Senha</a>
+                        </div>
+                        <p style="font-size: 14px; color: #64748b;">Este link é válido por 1 hora. Se você não solicitou essa mudança, pode ignorar este e-mail.</p>
+                        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+                        <p style="font-size: 12px; color: #94a3b8; text-align: center;">&copy; 2026 ShieldCheck AI. Todos os direitos reservados.</p>
+                    </div>
+                `,
+            });
+
+            if (emailError) {
+                console.error("[EMAIL ERROR]", emailError);
+                return res.status(500).json({ error: 'Erro ao enviar e-mail de recuperação.' });
+            }
+
+            res.json({ message: 'Se o e-mail estiver cadastrado, você receberá um link de recuperação em breve.' });
+        } catch (err) {
+            console.error("[FORGOT PASSWORD] Critical Error:", err);
+            res.status(500).json({ error: 'Erro interno no servidor.' });
+        }
+    });
+
+    // POST /api/reset-password
+    router.post('/reset-password', async (req, res) => {
+        const { token, newPassword } = req.body;
+        if (!token || !newPassword) return res.status(400).json({ error: 'Dados incompletos.' });
+
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            if (decoded.purpose !== 'password_reset') {
+                return res.status(400).json({ error: 'Token inválido para redefinição de senha.' });
+            }
+
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+            const { error } = await supabase
+                .from('users')
+                .update({ password_hash: hashedPassword })
+                .eq('id', decoded.id);
+
+            if (error) {
+                console.error("[RESET PASSWORD] DB Error:", error);
+                return res.status(500).json({ error: 'Erro ao atualizar a senha.' });
+            }
+
+            res.json({ message: 'Sua senha foi redefinida com sucesso! Você já pode fazer login.' });
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') {
+                return res.status(400).json({ error: 'O link de recuperação expirou. Solicite um novo.' });
+            }
+            return res.status(400).json({ error: 'Link de recuperação inválido.' });
+        }
     });
 
     return router;
