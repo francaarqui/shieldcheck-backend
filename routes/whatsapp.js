@@ -116,7 +116,7 @@ module.exports = function (supabase, openai, downloadWhatsAppMedia, sendWhatsApp
                 }]);
 
                 const botNumber = (req.body.To || "").replace('whatsapp:', '');
-                const shareLink = 'https://shieldcheckai.com/proteger';
+                const shareLink = 'https://shieldcheckai.com/indicar';
 
                 // Format Reply
                 const score = analysisResult.score;
@@ -162,7 +162,10 @@ module.exports = function (supabase, openai, downloadWhatsAppMedia, sendWhatsApp
 
                 await sendWhatsAppReply(From, reply);
             } else if (!Body && NumMedia === 0) {
-                await sendWhatsAppReply(From, "👋 Olá! Eu sou o assistente do ShieldCheck AI. Me envie um texto, áudio ou print suspecto para que eu possa analisar para você.");
+                const welcomeMsg = `👋 Olá! Eu sou o assistente do *ShieldCheck AI*.\n\n` +
+                    `Me envie um texto, áudio ou print suspeito para que eu possa analisar para você.\n\n` +
+                    `📌 *DICA DE SEGURANÇA:* Segure o dedo nesta conversa e selecione *FIXAR (Pin)* para que eu esteja sempre no topo e você me acesse rápido em caso de emergência! 🛡️`;
+                await sendWhatsAppReply(From, welcomeMsg);
             }
 
         } catch (error) {
