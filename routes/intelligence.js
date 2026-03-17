@@ -205,8 +205,24 @@ module.exports = function (supabase, authenticateToken) {
         // Simulação de scan (Phase 4)
         setTimeout(() => {
             const results = [
-                { source: 'Vazamento Canva 2019', date: '2019-05-24', data: 'Email, Senha, Nome' },
-                { source: 'Base "Combo List" Telegram', date: '2023-11-12', data: 'Email, Senha' }
+                {
+                    source: 'Vazamento Canva (2019)',
+                    date: '2019-05-24',
+                    data: 'E-mail, Senhas Hasheadas, Nome Completo',
+                    severity: 'CRÍTICA'
+                },
+                {
+                    source: 'Base "Anti-Public" Deep Web',
+                    date: '2023-11-12',
+                    data: 'E-mail, Senhas em Texto Puro',
+                    severity: 'ALTA'
+                },
+                {
+                    source: 'Global Data Breach Repository',
+                    date: '2024-01-05',
+                    data: 'IP de Conexão, Metadados de Sessão',
+                    severity: 'MÉDIA'
+                }
             ];
             res.json({ success: true, count: results.length, leaks: results });
         }, 2000);

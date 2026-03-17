@@ -137,19 +137,18 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Especialista de Segurança de Elite com foco em Threat Intelligence e E-commerce Fraud. Sua missão é realizar uma auditoria técnica profunda e implacável em domínios." },
+                    { role: "system", content: "Você é um Especialista de Segurança de Elite com foco em Threat Intelligence e E-commerce Fraud. Sua missão é realizar uma auditoria técnica profunda em domínios." },
                     {
-                        role: "user", content: `Analise a loja/domínio: "${url}". 
-                    Considere os seguintes vetores de análise:
-                    1. Reputação do domínio (simule consulta WHOIS, idade, proprietário).
-                    2. Certificados SSL (simule validação de CA, expiração, tipo de criptografia).
-                    3. Presença em Blacklists globais de phishing e malware.
-                    4. Padrões de infraestrutura (servidores conhecidos por hospedar fraudes, IPs suspeitos).
-                    5. Consistência de marca (simule checagem de typosquatting).
+                        role: "user", content: `Realize uma auditoria técnica completa no domínio: "${url}". 
+                    
+                    VETORES DE INVESTIGAÇÃO:
+                    - WHOIS: Analise idade do domínio, proprietário e ocultação de dados.
+                    - SSL: Verifique tipo de certificado, emissor e expiração.
+                    - DNS & HEADERS: Simule checagem de DMARC/SPF e cabeçalhos de servidor comuns em lojas falsas.
+                    - BLACKLISTS: Verifique reputação em bases globais de phishing e malware.
+                    - TYPOSQUATTING: Identifique variações de nomes de marcas famosas.
 
-                    Seja extremamente detalhado e técnico. Use termos como 'Entropia de URL', 'DMARC/SPF fail', 'SSL Handshake vulnerability' se aplicável.
-
-                    Retorne EXCLUSIVAMENTE um objeto JSON: { trustScore (0-100), registrationAge (string detalhada), riskFactors (array de strings técnicas), recommendation (veredito robusto e autoritário) }.` }
+                    Retorne um JSON detalhado: { trustScore (0-100), registrationAge (ex: "2 anos e 3 meses"), riskFactors (array de strings técnicas), recommendation (veredito técnico detalhado) }.` }
                 ],
                 response_format: { type: "json_object" }
             });
@@ -178,19 +177,18 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Analista de Deep Web e Fraude Transacional Senior. Você investiga chaves PIX e Números de Telefone em busca de vazamentos de dados, atividades ilícitas e padrões de crime organizado." },
+                    { role: "system", content: "Você é um Analista de Segurança Senior especializado em monitoramento de transações e Deep Web. Sua função é auditar chaves PIX e Números de Telefone em busca de padrões criminosos." },
                     {
-                        role: "user", content: `Investigue o seguinte item do tipo ${type}: "${value}".
-                    Histórico interno de denúncias: ${reportsCount}.
+                        role: "user", content: `Investigue o item (${type}): "${value}". 
+                    Histórico de denúncias: ${reportsCount}.
 
-                    Parâmetros de Auditoria:
-                    - Padrões sintáticos de chaves aleatórias usadas em golpes automatizados.
-                    - Cruzamento com formatos conhecidos de CPFs vazados.
-                    - Geolocalização de DDDs com alta incidência de 'Telemarketing Predatório' ou 'Golpe do WhatsApp'.
-                    - Simulacro de presença em fóruns de vazamento e bancos de dados de spammers.
+                    CRITÉRIOS DE AUDITORIA:
+                    - Padrões de nomes de laranjas ou contas de aluguel.
+                    - Formatos de chaves aleatórias geradas por scripts de golpe.
+                    - DDDs e Prefixos com alto índice de atividades de estelionato.
+                    - Cruzamento com formatos de dados comumente encontrados em leaks.
 
-                    Seja técnico e direto.
-                    Retorne EXCLUSIVAMENTE um objeto JSON: { score (0-100 onde 100 é crime certo), status (string técnica), reportedTimes (number), signals (array de strings sobre descobertas técnicas), recommendation (decisão de segurança final) }.` }
+                    Retorne um JSON: { score (0-100), status (string técnica), reportedTimes (number), signals (array de achados técnicos), recommendation (diretriz de segurança final) }.` }
                 ],
                 response_format: { type: "json_object" }
             });
@@ -217,19 +215,20 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Especialista em Análise de Malware e URLs. Seu trabalho é dissecar links encurtados e identificar redirecionamentos maliciosos (Open Redirects) e páginas de Phishing de Credenciais." },
+                    { role: "system", content: "Você é um Especialista de Forense em URLs e Malware. Sua função é expandir links e identificar redirecionamentos perigosos." },
                     {
-                        role: "user", content: `Expanda e analise este link: "${url}". 
-                    Identifique:
-                    - O destino final provável.
-                    - Se o serviço de encurtamento é legítimo ou abusado por criminosos.
-                    - Presença de parâmetros de rastreamento malicioso (UTMs forjadas).
-                    - Risco de Drive-by Download no destino.
-
-                    Retorne EXCLUSIVAMENTE um objeto JSON: { expandedUrl (string), analysis: { trustScore, riskFactors (array técnico), recommendation (string autoritária) } }.` }
+                        role: "user", content: `Analise o link: "${url}". 
+                    
+                    OBJETIVOS:
+                    - Expandir encurtadores e identificar o destino real.
+                    - Detectar Shadow Redirects e Phishing de credenciais.
+                    - Avaliar a reputação do serviço de encurtamento.
+                    
+                    Retorne um JSON: { expandedUrl (string), analysis: { trustScore, riskFactors (array), recommendation (string) } }.` }
                 ],
                 response_format: { type: "json_object" }
             });
+            res.json(JSON.parse(response.choices[0].message.content));
         } catch (err) {
             res.status(500).json({ error: 'Erro ao expandir link.' });
         }

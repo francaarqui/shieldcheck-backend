@@ -3,35 +3,40 @@ const fs = require('fs');
 const analyzeContent = async (openai, text, type = 'text') => {
     try {
         const prompt = `
-        Aja como um especialista em segurança cibernética e detecção de fraudes digitais (golpes de WhatsApp, SMS, E-mail e links maliciosos).
-        Analise o seguinte conteúdo e forneça um resultado em formato JSON estrito com os seguintes campos:
-        - score: um número de 0 a 100 representando o nível de risco (0-30 baixo, 31-60 suspeito, 61-100 alto).
-        - status: Texto curto em MAIÚSCULAS ('BAIXO RISCO', 'CONTEÚDO SUSPEITO' ou 'ALTO RISCO').
-        - signals: um array de strings com detalhes específicos sobre o motivo de ser golpe (ex: "Urgência detectada", "Promessa de dinheiro fácil", "Link suspeito"). Se for seguro, diga o que parece normal.
-        - recommendation: uma sugestão clara do que o usuário deve fazer.
-
-        CONTEÚDO PARA ANÁLISE:
+        Aja como um Perito Sênior em Forense Digital e Threat Intelligence. Sua missão é dissecar o conteúdo fornecido em busca de vetores de ataque, padrões de engenharia social e sinais técnicos de fraude.
+        
+        Analise o seguinte conteúdo:
         "${text}"
+
+        VETORES DE ANÁLISE OBRIGATÓRIOS:
+        1. PERSUASÃO: Detecte gatilhos de urgência, autoridade forjada, medo (fomo) ou promessas irreais.
+        2. SINTAXE E ORIGEM: Analise erros gramaticais propositais (evasão de filtros), inconsistência de links e remetentes suspeitos.
+        3. ENTROPIA TÉCNICA: Avalie se a estrutura da mensagem segue padrões conhecidos de bots de spam ou campanhas de phishing em massa.
+
+        Retorne um resultado em formato JSON estrito:
+        - score: (0-100) Representando a probabilidade estatística de fraude/perigo.
+        - status: Texto curto ('BAIXO RISCO', 'CONTEÚDO SUSPEITO', 'ALTO RISCO').
+        - signals: Array de strings com achados forenses técnicos (ex: "Uso de domínios homográficos", "Gatilho de urgência cognitiva", "Anomalia em registro de SPF").
+        - recommendation: Recomendação autoritária e clara baseada em protocolos de segurança.
         `;
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4o",
             messages: [
-                { role: "system", content: "Você é um especialista em análise de fraudes digitais. Responda apenas em JSON." },
+                { role: "system", content: "Você é um analista de elite em segurança cibernética. Responda exclusivamente em JSON." },
                 { role: "user", content: prompt }
             ],
             response_format: { type: "json_object" }
         });
 
-        const result = JSON.parse(response.choices[0].message.content);
-        return result;
+        return JSON.parse(response.choices[0].message.content);
     } catch (error) {
         console.error("OpenAI Error:", error);
         return {
             score: 50,
             status: 'ERRO NA ANÁLISE',
-            signals: ['Não foi possível conectar à inteligência central.'],
-            recommendation: 'Tente novamente em instantes ou verifique manualmente.'
+            signals: ['Falha na comunicação com o motor de inferência central.'],
+            recommendation: 'Proceda com cautela extrema e verifique manualmente as fontes.'
         };
     }
 };
@@ -59,25 +64,25 @@ const analyzeImage = async (openai, filePath) => {
             extension === 'webp' ? 'image/webp' : 'image/jpeg';
 
         const response = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-4o",
             messages: [
                 {
                     role: "user",
                     content: [
                         {
                             type: "text",
-                            text: `Analise este print de tela (pode ser uma conversa de WhatsApp, um site, ou um SMS).
-                            Identifique sinais de:
-                            1. GOLPES DE PIX (pressão para pagamento rápido).
-                            2. PHISHING (links falsos que imitam bancos ou lojas).
-                            3. ENGENHARIA SOCIAL (alguém pedindo dinheiro ou fingindo ser parente).
-                            4. ERROS DE PORTUGUÊS ou design amador em sites "oficiais".
-
+                            text: `Aja como um Perito em Visão Computacional de Segurança. Analise este print de tela em busca de fraudes visuais.
+                            
+                            FOCO DA ANÁLISE:
+                            - Falsificação de interface (UI Spoofing) de bancos ou lojas.
+                            - Elementos de manipulação psicológica (contadores de tempo falsos, alertas de 'conta bloqueada').
+                            - Inconsistências em logotipos, fontes e alinhamentos que indicam amadorismo ou clonagem.
+                            
                             RETORNE UM JSON COM:
-                            - score: (0-100) nível de risco.
+                            - score: (0-100) Probabilidade de fraude.
                             - status: (BAIXO RISCO, CONTEÚDO SUSPEITO, ALTO RISCO).
-                            - signals: array de sinais detectados.
-                            - recommendation: recomendação clara de segurança.`
+                            - signals: Array de evidências visuais forenses encontradas.
+                            - recommendation: Instrução técnica de proteção.`
                         },
                         {
                             type: "image_url",
@@ -97,8 +102,8 @@ const analyzeImage = async (openai, filePath) => {
         return {
             score: 50,
             status: 'ERRO NA VISÃO',
-            signals: ['Não foi possível analisar a imagem.'],
-            recommendation: 'Tente descrever o que está na imagem para uma análise textual.'
+            signals: ['Falha técnica no motor de inteligência visual.'],
+            recommendation: 'Analise o texto da imagem manualmente na nossa busca textual.'
         };
     }
 };
