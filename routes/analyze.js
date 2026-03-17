@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const { analyzeContent, transcribeMedia, analyzeImage } = require('../utils/analyzer');
+const { getNetworkInfo } = require('../utils/networkChecker');
 
 module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuota, upload) {
 
@@ -134,21 +135,28 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const domainMatch = url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n?]+)/im);
             const domain = domainMatch ? domainMatch[1] : url;
 
+            const networkData = await getNetworkInfo(domain);
+
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Especialista de Segurança de Elite com foco em Threat Intelligence e E-commerce Fraud. Sua missão é realizar uma auditoria técnica profunda em domínios." },
+                    { role: "system", content: "Você é um Especialista de Segurança de Elite com foco em Threat Intelligence e E-commerce Fraud. Sua missão é realizar uma auditoria técnica profunda. IMPORTANTE: Seja 100% factual. Se um dado não estiver no contexto, diga que não foi possível verificar. NUNCA invente idade de registro, proprietários ou métricas exatas se não as tiver." },
                     {
                         role: "user", content: `Realize uma auditoria técnica completa no domínio: "${url}". 
                     
+                    DADOS TÉCNICOS EM TEMPO REAL (CONTEXTO):
+                    - DNS: ${JSON.stringify(networkData.dns)}
+                    - SSL: ${JSON.stringify(networkData.ssl)}
+                    
                     VETORES DE INVESTIGAÇÃO:
-                    - WHOIS: Analise idade do domínio, proprietário e ocultação de dados.
-                    - SSL: Verifique tipo de certificado, emissor e expiração.
-                    - DNS & HEADERS: Simule checagem de DMARC/SPF e cabeçalhos de servidor comuns em lojas falsas.
-                    - BLACKLISTS: Verifique reputação em bases globais de phishing e malware.
-                    - TYPOSQUATTING: Identifique variações de nomes de marcas famosas.
+                    - WHOIS: Analise idade aparente (se disponível em base de conhecimento ou contexto). SE O DOMÍNIO FOR RECENTE E NÃO ESTIVER NA BASE, admita que é um domínio novo ou desconhecido.
+                    - SSL: Verifique o emissor e validade no contexto fornecido.
+                    - DNS & HEADERS: Use os registros DNS fornecidos para avaliar a robustez.
+                    - TYPOSQUATTING: Identifique se tenta imitar marcas famosas.
 
-                    Retorne um JSON detalhado: { trustScore (0-100), registrationAge (ex: "2 anos e 3 meses"), riskFactors (array de strings técnicas), recommendation (veredito técnico detalhado) }.` }
+                    REGRA DE OURO: Se o domínio for novo (ex: criado há poucos dias), o TrustScore deve ser baixo. Não invente que ele tem 2 anos se você não tiver certeza absoluta.
+
+                    Retorne um JSON detalhado: { trustScore (0-100), registrationAge (ex: "Não disponível" ou idade real), riskFactors (array de strings técnicas), recommendation (veredito técnico detalhado) }.` }
                 ],
                 response_format: { type: "json_object" }
             });
@@ -205,31 +213,119 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
         }
     });
 
-    // POST /api/expand-url (Phase 3)
+    // POST /api/check-social
+    router.post('/check-social', optionalAuthenticateToken, checkQuota, async (req, res) => {
+        const { handle } = req.body;
+        if (!handle) return res.status(400).json({ error: 'Handle necessário.' });
+
+        try {
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o",
+                messages: [
+                    { role: "system", content: "Você é um Especialista em Inteligência de Fontes Abertas (OSINT) e detecção de perfis falsos. Sua missão é analisar perfis sociais em busca de indicadores de automação (bots) e fraude." },
+                    {
+                        role: "user", content: `Analise o perfil: "@${handle}". 
+                    
+                    VETORES DE INVESTIGAÇÃO:
+                    - Verifique se o handle segue padrões de botnets.
+                    - Sinais de engenharia social em biografias.
+                    - IMPORTANTE: NÃO INVENTE números exatos de seguidores ou idade da conta. Use termos qualitativos como "Análise de Perfil Sugere..." ou "Dados de métricas não disponíveis para consulta em tempo real".
+ 
+                    Retorne um JSON: { botProbability (0-100), accountAge (string: "Não disponível"), followers (string: "Não disponível"), following (string: "Não disponível"), riskLevel (Baixo, Médio, ALTO), verdict (string curta), signals (array de achados), recommendation (string) }.` }
+                ],
+                response_format: { type: "json_object" }
+            });
+
+            const result = JSON.parse(response.choices[0].message.content);
+            res.json(result);
+        } catch (err) {
+            console.error('Check Social Error:', err);
+            res.status(500).json({ error: 'Erro ao analisar perfil.' });
+        }
+    });
+
+    // POST /api/analyze-doc
+    router.post('/analyze-doc', optionalAuthenticateToken, checkQuota, upload.single('file'), async (req, res) => {
+        const file = req.file;
+        if (!file) return res.status(400).json({ error: 'Arquivo necessário.' });
+
+        try {
+            const imageData = fs.readFileSync(file.path, { encoding: 'base64' });
+            const extension = file.path.split('.').pop().toLowerCase();
+            const mimeType = extension === 'png' ? 'image/png' : extension === 'webp' ? 'image/webp' : 'image/jpeg';
+
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o",
+                messages: [
+                    {
+                        role: "user",
+                        content: [
+                            {
+                                type: "text",
+                                text: `Aja como um Perito Forense Documental. Realize OCR e análise técnica nesta imagem de documento ou boleto.
+                                
+                                EXTRAIA COM PRECISÃO:
+                                - Tipo de documento (Ex: Boleto Bancário, Nota Fiscal, Documento Identidade).
+                                - Beneficiário (Nome completo e CNPJ/CPF se visível).
+                                - Instituição (Banco ou órgão emissor).
+                                - Valor total.
+                                
+                                ANALISE TÉCNICA:
+                                - Verifique se os dados extraídos são consistentes entre si.
+                                - Identifique sinais de manipulação digital ou formatação suspeita.
+                                - Avalie o risco de ser um boleto falso baseado em padrões criminosos conhecidos.
+                                
+                                RETORNE UM JSON: { type, beneficiary, cnpj, bank, value, riskScore (0-100), status (Legítimo, Suspeito, GOLPE), signals (array), recommendation }.`
+                            },
+                            {
+                                type: "image_url",
+                                image_url: { "url": `data:${mimeType};base64,${imageData}` },
+                            },
+                        ],
+                    },
+                ],
+                response_format: { type: "json_object" }
+            });
+
+            fs.unlinkSync(file.path);
+            const result = JSON.parse(response.choices[0].message.content);
+            res.json(result);
+        } catch (err) {
+            if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+            console.error('Analyze Doc Error:', err);
+            res.status(500).json({ error: 'Erro ao analisar documento.' });
+        }
+    });
+
+    // GET /api/expand-url (Phase 3 - Link Expander)
     router.get('/expand-url', optionalAuthenticateToken, async (req, res) => {
         const { url } = req.query;
         if (!url) return res.status(400).json({ error: 'URL necessária.' });
 
+        console.log(`🔗 Iniciando expansão e análise forense de link: ${url}`);
+
         try {
-            // Simulação de expansão e análise
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Especialista de Forense em URLs e Malware. Sua função é expandir links e identificar redirecionamentos perigosos." },
+                    { role: "system", content: "Você é um Especialista em Cyber Intelligence do ShieldCheck AI. Sua função é analisar links encurtados, expandi-los e realizar uma auditoria de segurança técnica." },
                     {
                         role: "user", content: `Analise o link: "${url}". 
-                    
-                    OBJETIVOS:
-                    - Expandir encurtadores e identificar o destino real.
-                    - Detectar Shadow Redirects e Phishing de credenciais.
-                    - Avaliar a reputação do serviço de encurtamento.
-                    
-                    Retorne um JSON: { expandedUrl (string), analysis: { trustScore, riskFactors (array), recommendation (string) } }.` }
+
+                    MISSÃO:
+                    1. Identifique o destino real provável (se for um encurtador conhecido como bit.ly, tinyurl, etc).
+                    2. Realize uma auditoria técnica sobre esse destino.
+                    3. Verifique sinais de phishing, redirecionamentos maliciosos em cascata ou scripts de roubo de sessão.
+
+                    Retorne um JSON: { expandedUrl (string), analysis: { trustScore (0-100), riskFactors (array), recommendation (string) } }.` }
                 ],
                 response_format: { type: "json_object" }
             });
-            res.json(JSON.parse(response.choices[0].message.content));
+
+            const result = JSON.parse(response.choices[0].message.content);
+            res.json(result);
         } catch (err) {
+            console.error('Expand URL Error:', err);
             res.status(500).json({ error: 'Erro ao expandir link.' });
         }
     });

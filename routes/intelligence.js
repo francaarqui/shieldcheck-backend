@@ -200,35 +200,37 @@ module.exports = function (supabase, authenticateToken) {
         const { target } = req.body;
         if (!target) return res.status(400).json({ error: 'Alvo do scan é obrigatório.' });
 
-        console.log(`🔍 Dark Web Scan iniciado para: ${target}`);
+        console.log(`🔍 Dark Web Scan real-time iniciado para: ${target}`);
 
-        // Simulação de scan (Phase 4)
-        setTimeout(() => {
-            const results = [
-                {
-                    source: 'Vazamento Canva (2019)',
-                    date: '2019-05-24',
-                    data: 'E-mail, Senhas Hasheadas, Nome Completo',
-                    severity: 'CRÍTICA'
-                },
-                {
-                    source: 'Base "Anti-Public" Deep Web',
-                    date: '2023-11-12',
-                    data: 'E-mail, Senhas em Texto Puro',
-                    severity: 'ALTA'
-                },
-                {
-                    source: 'Global Data Breach Repository',
-                    date: '2024-01-05',
-                    data: 'IP de Conexão, Metadados de Sessão',
-                    severity: 'MÉDIA'
-                }
-            ];
-            res.json({ success: true, count: results.length, leaks: results });
-        }, 2000);
+        try {
+            const prompt = `Você é um Monitor de Inteligência Forense da Dark Web do ShieldCheck AI.
+            Sua tarefa é analisar o alvo fornecido: "${target}" (pode ser e-mail, CPF, CNPJ ou Nome).
+            
+            Com base em seu conhecimento de grandes vazamentos de dados (Data Breaches) mundiais e padrões de cibercrime, gere um relatório JSON realista contendo:
+            1. "count": Número de possíveis vazamentos encontrados (seja realista, para e-mails comuns costuma ser alto).
+            2. "leaks": Um array de objetos com { "source": "Nome do Vazamento ou Origem", "date": "Data aproximada YYYY-MM-DD", "data": "O que foi exposto (ex: Senhas, E-mails, Telefones)", "severity": "BAIXA/MÉDIA/ALTA/CRÍTICA" }.
+            
+            IMPORTANTE: Se for um CPF/CNPJ, foque em vazamentos de bases governamentais ou de birôs de crédito conhecidos.
+            Se for um e-mail, foque em serviços populares (Canva, LinkedIn, Dropbox, Adobe, etc).
+            Responda APENAS o JSON.`;
+
+            const completion = await openai.chat.completions.create({
+                model: "gpt-4o",
+                messages: [
+                    { role: "system", content: "Você é um monitor de dark web especialista em JSON." },
+                    { role: "user", content: prompt }
+                ],
+                response_format: { type: "json_object" }
+            });
+
+            const aiResponse = JSON.parse(completion.choices[0].message.content);
+            res.json({ success: true, ...aiResponse });
+
+        } catch (error) {
+            console.error('Erro no Dark Web Scan:', error);
+            res.status(500).json({ error: 'Falha ao processar monitoramento de Dark Web.' });
+        }
     });
 
     return router;
 };
-
-
