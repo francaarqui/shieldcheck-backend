@@ -140,7 +140,16 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Especialista de Segurança Forense do ShieldCheck AI. Sua missão é analisar dados técnicos REAIS. IMPORTANTE: Use APENAS os dados fornecidos no CONTEXTO TÉCNICO para afirmar fatos. Se o SSL estiver como 'valid: true' no contexto, NUNCA diga que ele é inválido. Se os nameservers não forem 'hostgator', NUNCA mencione hostgator. Se você não tiver a data exata de registro no contexto, diga 'Informação técnica pendente' ou 'Domínio recém-identificado', mas NUNCA invente anos ou meses." },
+                    {
+                        role: "system",
+                        content: `Você é um Especialista de Segurança Forense do ShieldCheck AI. Sua missão é analisar dados técnicos REAIS. 
+                        REGRAS ABSOLUTAS:
+                        1. Use APENAS os dados do CONTEXTO TÉCNICO para afirmar fatos. 
+                        2. Se 'ssl.valid' ou 'ssl.isFunctional' for true, o SSL é SEGURO. Nunca diga que é inválido.
+                        3. Se 'nameservers' estiver vazio [], diga 'Não foi possível identificar os servidores DNS' e NUNCA invente HostGator ou qualquer outro provedor.
+                        4. Se você não tiver a data de registro, diga 'Informação técnica pendente', mas NUNCA invente idade.
+                        5. Se o TrustScore for baixo, explique que é pela falta de histórico público ou domínio muito recente, e não por falhas técnicas inexistentes.`
+                    },
                     {
                         role: "user", content: `AUDITORIA TÉCNICA DE ELITE: "${url}". 
                     
