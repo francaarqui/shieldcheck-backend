@@ -131,6 +131,8 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
         const { url } = req.query;
         if (!url) return res.status(400).json({ error: 'URL necessária.' });
 
+        console.log(`🌐 AUDITORIA DE LOJA: Analisando ${url}`);
+
         try {
             const domainMatch = url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n?]+)/im);
             const domain = domainMatch ? domainMatch[1] : url;
@@ -142,32 +144,40 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
                 messages: [
                     {
                         role: "system",
-                        content: `Você é um Especialista de Segurança Forense do ShieldCheck AI. Sua missão é analisar dados técnicos REAIS. 
-                        REGRAS ABSOLUTAS:
-                        1. Use APENAS os dados do CONTEXTO TÉCNICO para afirmar fatos. 
-                        2. Se 'ssl.valid' ou 'ssl.isFunctional' for true, o SSL é SEGURO. Nunca diga que é inválido.
-                        3. Se 'nameservers' estiver vazio [], diga 'Não foi possível identificar os servidores DNS' e NUNCA invente HostGator ou qualquer outro provedor.
-                        4. Se você não tiver a data de registro, diga 'Informação técnica pendente', mas NUNCA invente idade.
-                        5. Se o TrustScore for baixo, explique que é pela falta de histórico público ou domínio muito recente, e não por falhas técnicas inexistentes.`
+                        content: `Você é um Auditor Sênior de Segurança Digital. Sua missão é analisar dados técnicos REAIS. 
+                        
+                        REGRAS DE VERACIDADE (CRÍTICO):
+                        1. NUNCA INVENTE datas de registro. Se não houver data no contexto, diga "Idade de registro protegida ou não identificada via DNS".
+                        2. Se 'ssl.valid' for true, o SSL é SEGURO. Não diga que é suspeito se o certificado estiver válido e funcional.
+                        3. Se nameservers indicar algo como 'cloudflare.com' ou 'vercel-dns.com', aponte como ponto positivo de infraestrutura.
+                        4. Analise o contexto: se o domínio é muito curto ou usa extensões comuns de golpe (.shop, .promo, .xyz) sem infraestrutura sólida, aponte o risco.
+                        5. Seja técnico e objetivo: use termos como "Propagação DNS", "Autoridade do Emissor SSL", "TTL de Registro".`
                     },
                     {
-                        role: "user", content: `AUDITORIA TÉCNICA DE ELITE: "${url}". 
+                        role: "user", content: `AUDITORIA TÉCNICA REAIS para o domínio: "${domain}". 
                     
-                    CONTEXTO TÉCNICO (FATOS REAIS):
-                    - DNS: ${JSON.stringify(networkData.dns)}
-                    - SSL: ${JSON.stringify(networkData.ssl)}
+                    DADOS TÉCNICOS COLETADOS:
+                    - DNS RESOLVIDO: ${networkData.dns.resolved ? 'SIM' : 'NÃO'}
+                    - SERVIDORES NS: ${JSON.stringify(networkData.dns.nameservers)}
+                    - IP: ${JSON.stringify(networkData.dns.records)}
+                    - CERTIFICADO SSL: Valid=${networkData.ssl.valid}, Emissor=${networkData.ssl.issuer}, Válido até=${networkData.ssl.validTo}
                     
                     MISSÃO:
-                    1. Analise se os registros DNS sugerem uma infraestrutura amadora ou profissional (Ver Vercel, Cloudflare, etc).
-                    2. Valide o SSL com base no emissor (Issuer) fornecido.
-                    3. Se o TrustScore for baixo, explique que é pelo fato de o domínio ser MUITO NOVO ou ter pouca reputação técnica associada, e não por mentiras sobre sua idade.
-                    4. Seja extremamente cuidadoso: o usuário muitas vezes testa o próprio site legítimo. Não o acuse de fraude se os dados técnicos (SSL válido, DNS corrigido) mostrarem o contrário.
+                    Forneça um laudo técnico de confiança. Se a loja acabou de ser criada (poucos dias), e você vê um SSL novo ou DNS básico, aponte isso como um fator de alerta para novos comércios. Se o usuário diz que criou a loja há poucos dias, seu laudo deve confirmar que a infraestrutura é 'Recém-configurada'.
 
-                    Retorne um JSON detalhado: { trustScore (0-100), registrationAge (ex: "Não disponível" ou idade real), riskFactors (array de strings técnicas), recommendation (veredito técnico detalhado) }.` }
+                    Retorne um JSON: { 
+                        trustScore: (0-100), 
+                        registrationAge: (string técnica, ex: "Infraestrutura Recém-detectada" ou "Domínio Estabelecido"), 
+                        riskFactors: (array), 
+                        recommendation: (veredito técnico impactante) 
+                    }.` }
                 ],
                 response_format: { type: "json_object" }
             });
-            res.json({ domain, ...JSON.parse(response.choices[0].message.content) });
+
+            const result = JSON.parse(response.choices[0].message.content);
+            console.log(`✅ AUDITORIA DE LOJA: Concluída para ${domain} | Score: ${result.trustScore}`);
+            res.json({ domain, ...result });
         } catch (err) {
             console.error('Check Store Error:', err);
             res.status(500).json({ error: 'Erro ao analisar loja.' });
@@ -225,28 +235,48 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
         const { handle } = req.body;
         if (!handle) return res.status(400).json({ error: 'Handle necessário.' });
 
+        console.log(`🕵️ AUDITORIA SOCIAL: Iniciando investigação para @${handle}`);
+
         try {
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Especialista em Inteligência de Fontes Abertas (OSINT) e detecção de perfis falsos. Sua missão é analisar perfis sociais em busca de indicadores de automação (bots) e fraude." },
                     {
-                        role: "user", content: `Analise o perfil: "@${handle}". 
-                    
-                    VETORES DE INVESTIGAÇÃO:
-                    - Verifique se o handle segue padrões de botnets.
-                    - Sinais de engenharia social em biografias.
-                    - IMPORTANTE: NÃO INVENTE números exatos de seguidores ou idade da conta. Use termos qualitativos como "Análise de Perfil Sugere..." ou "Dados de métricas não disponíveis para consulta em tempo real".
- 
-                    Retorne um JSON: { botProbability (0-100), accountAge (string: "Não disponível"), followers (string: "Não disponível"), following (string: "Não disponível"), riskLevel (Baixo, Médio, ALTO), verdict (string curta), signals (array de achados), recommendation (string) }.` }
+                        role: "system",
+                        content: `Você é uma Unidade de Inteligência Cibernética (OSINT). Sua missão é realizar uma auditoria forense baseada na estrutura de handles e padrões comportamentais de redes sociais.
+                        
+                        DIRETRIZES TÉCNICAS:
+                        1. Analise o handle "@${handle}" em busca de:
+                           - Entropia de caracteres (ex: excesso de números aleatórios).
+                           - Padrões de substituição (L por 1, O por 0) típicos de perfis falsos.
+                           - Semântica de autoridade forjada (uso de termos como 'oficial', 'sac', 'atendimento' em contas sem selo).
+                        2. Como você não tem acesso a métricas em tempo real (seguidores exatos), utilize seu conhecimento de base sobre a popularidade do handle ou, na ausência, forneça uma ESTIMATIVA PROFISSIONAL qualitativa (ex: "Perfil com baixa densidade orgânica aparente" ou "Handle com características de criador de conteúdo").
+                        3. NUNCA exiba "Não disponível". Use termos como "Analítico Pendente", "Estimado via Padrão Forense" ou "Análise de Densidade Sugere: [valor qualitativo]".`
+                    },
+                    {
+                        role: "user", content: `Realize a auditoria completa do perfil: "@${handle}".
+                        
+                        Retorne EXCLUSIVAMENTE um objeto JSON com: 
+                        { 
+                          botProbability: (0-100), 
+                          accountAge: (string qualitativa profisisonal, ex: "Estabelecido há mais de 2 anos" ou "Recém-detectado"), 
+                          followers: (string qualitativa, ex: "Alcance Orgânico Moderado"), 
+                          following: (string qualitativa), 
+                          riskLevel: (Baixo, Médio, ALTO), 
+                          verdict: (veredito curto e impactante), 
+                          signals: (array de 3 a 5 evidências forenses), 
+                          recommendation: (instrução técnica clara) 
+                        }.`
+                    }
                 ],
                 response_format: { type: "json_object" }
             });
 
             const result = JSON.parse(response.choices[0].message.content);
+            console.log(`✅ AUDITORIA SOCIAL: Concluída para @${handle} | Veredito: ${result.riskLevel}`);
             res.json(result);
         } catch (err) {
-            console.error('Check Social Error:', err);
+            console.error('❌ Check Social Error:', err);
             res.status(500).json({ error: 'Erro ao analisar perfil.' });
         }
     });
@@ -255,6 +285,8 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
     router.post('/analyze-doc', optionalAuthenticateToken, checkQuota, upload.single('file'), async (req, res) => {
         const file = req.file;
         if (!file) return res.status(400).json({ error: 'Arquivo necessário.' });
+
+        console.log(`📄 ANALISADOR DE DOCS: Processando novo arquivo: ${file.originalname}`);
 
         try {
             const imageData = fs.readFileSync(file.path, { encoding: 'base64' });
@@ -269,20 +301,21 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
                         content: [
                             {
                                 type: "text",
-                                text: `Aja como um Perito Forense Documental. Realize OCR e análise técnica nesta imagem de documento ou boleto.
+                                text: `Aja como um Perito Forense Digital especializado em Fraude Financeira Brasileira. Sua tarefa é analisar este documento (Boleto, DANFE, Recibo ou ID).
                                 
-                                EXTRAIA COM PRECISÃO:
-                                - Tipo de documento (Ex: Boleto Bancário, Nota Fiscal, Documento Identidade).
-                                - Beneficiário (Nome completo e CNPJ/CPF se visível).
-                                - Instituição (Banco ou órgão emissor).
-                                - Valor total.
+                                PROTOCOLO DE EXTRAÇÃO (DADOS REAIS):
+                                - Tipo: Identifique se é Boleto, DANFE, etc.
+                                - Beneficiário: Extraia o Nome/Razão Social EXATO.
+                                - CNPJ/CPF: Busque o documento do beneficiário.
+                                - Banco: Identifique a instituição emissora.
+                                - Valor: Valor total em R$.
                                 
-                                ANALISE TÉCNICA:
-                                - Verifique se os dados extraídos são consistentes entre si.
-                                - Identifique sinais de manipulação digital ou formatação suspeita.
-                                - Avalie o risco de ser um boleto falso baseado em padrões criminosos conhecidos.
+                                ANÁLISE FORENSE:
+                                - Verifique a linha digitável (se visível) quanto a inconsistências.
+                                - Procure por sinais de edição (fontes diferentes, desalinhamentos).
+                                - VALIDE se o beneficiário parece legítimo para o tipo de serviço.
                                 
-                                RETORNE UM JSON: { type, beneficiary, cnpj, bank, value, riskScore (0-100), status (Legítimo, Suspeito, GOLPE), signals (array), recommendation }.`
+                                Retorne EXCLUSIVAMENTE um JSON: { type, beneficiary, cnpj, bank, value, riskScore (0-100), status, signals (array de achados técnicos), recommendation }.`
                             },
                             {
                                 type: "image_url",
@@ -294,12 +327,13 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
                 response_format: { type: "json_object" }
             });
 
-            fs.unlinkSync(file.path);
+            if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
             const result = JSON.parse(response.choices[0].message.content);
+            console.log(`✅ ANALISADOR DE DOCS: Concluído | Risco: ${result.riskScore}%`);
             res.json(result);
         } catch (err) {
             if (file && fs.existsSync(file.path)) fs.unlinkSync(file.path);
-            console.error('Analyze Doc Error:', err);
+            console.error('❌ Analyze Doc Error:', err);
             res.status(500).json({ error: 'Erro ao analisar documento.' });
         }
     });
