@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { authenticator } = require('otplib');
 const qrcode = require('qrcode');
+const { OAuth2Client } = require('google-auth-library');
 
 module.exports = function (supabase, JWT_SECRET, authenticateToken, resend) {
 
@@ -105,6 +106,81 @@ module.exports = function (supabase, JWT_SECRET, authenticateToken, resend) {
 
         const token = jwt.sign({ id: user.id, email: user.email, name: user.name, plan: user.plan }, JWT_SECRET, { expiresIn: '7d' });
         res.json({ token, user: { id: user.id, name: user.name, email: user.email, plan: user.plan, points: user.points || 0 } });
+    });
+
+    // POST /api/google-login
+    router.post('/google-login', async (req, res) => {
+        const { idToken } = req.body;
+        if (!idToken) return res.status(400).json({ error: 'Token do Google ausente.' });
+
+        try {
+            const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+            const ticket = await client.verifyIdToken({
+                idToken,
+                audience: process.env.GOOGLE_CLIENT_ID,
+            });
+            const payload = ticket.getPayload();
+            const { sub: googleId, email, name, picture } = payload;
+
+            // 1. Verificar se o usuário já existe no banco
+            let { data: user, error: fetchError } = await supabase
+                .from('users')
+                .select('*')
+                .eq('email', email)
+                .single();
+
+            if (fetchError && fetchError.code !== 'PGRST116') {
+                console.error("[GOOGLE LOGIN] Error fetching user:", fetchError);
+            }
+
+            if (!user) {
+                // 2. Se não existir, criar novo usuário
+                // Usamos uma senha aleatória complexa já que o login é via OAuth
+                const randomPassword = require('crypto').randomBytes(16).toString('hex');
+                const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+                const { data: newUser, error: createError } = await supabase
+                    .from('users')
+                    .insert([{
+                        name,
+                        email,
+                        password_hash: hashedPassword,
+                        avatar_url: picture,
+                        plan: 'FREE'
+                    }])
+                    .select()
+                    .single();
+
+                if (createError) {
+                    console.error("[GOOGLE LOGIN] Error creating user:", createError);
+                    return res.status(500).json({ error: 'Erro ao criar conta via Google.' });
+                }
+                user = newUser;
+            }
+
+            // 3. Gerar JWT do projeto
+            const token = jwt.sign(
+                { id: user.id, email: user.email, name: user.name, plan: user.plan },
+                JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
+            res.json({
+                token,
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    plan: user.plan,
+                    points: user.points || 0,
+                    avatar_url: user.avatar_url
+                }
+            });
+
+        } catch (err) {
+            console.error("[GOOGLE LOGIN] Verification Error:", err);
+            res.status(401).json({ error: 'Token do Google inválido ou expirado.' });
+        }
     });
 
     // POST /api/mfa/setup (Phase 6)
