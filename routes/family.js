@@ -55,21 +55,6 @@ module.exports = function (supabase, authenticateToken) {
         }
     });
 
-    // POST /api/darkweb/scan
-    router.post('/darkweb/scan', authenticateToken, async (req, res) => {
-        const { target } = req.body;
-        if (!target) return res.status(400).json({ error: 'Alvo do scan é obrigatório.' });
-
-        console.log(`🔍 Dark Web Scan iniciado para: ${target}`);
-
-        setTimeout(() => {
-            const results = [
-                { source: 'Vazamento Canva 2019', date: '2019-05-24', data: 'Email, Senha, Nome' },
-                { source: 'Base "Combo List" Telegram', date: '2023-11-12', data: 'Email, Senha' }
-            ];
-            res.json({ success: true, count: results.length, leaks: results });
-        }, 2000);
-    });
 
     return router;
 };
