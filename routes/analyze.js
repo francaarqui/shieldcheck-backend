@@ -117,9 +117,9 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
         }
     });
 
-    // POST /api/analyze-store (Phase 3)
-    router.post('/analyze-store', optionalAuthenticateToken, async (req, res) => {
-        const { url } = req.body;
+    // GET /api/check-store (Phase 3)
+    router.get('/check-store', optionalAuthenticateToken, async (req, res) => {
+        const { url } = req.query;
         if (!url) return res.status(400).json({ error: 'URL necessária.' });
 
         try {
@@ -129,14 +129,72 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const response = await openai.chat.completions.create({
                 model: "gpt-4o-mini",
                 messages: [
-                    { role: "system", content: "Você é um especialista em segurança de e-commerce. Responda apenas em JSON." },
-                    { role: "user", content: `Analise a loja: "${url}". Retorne JSON com: trustScore (0-100), registrationAge (string), riskFactors (array), recommendation (string).` }
+                    { role: "system", content: "Você é um especialista em segurança de e-commerce. Analise a confiabilidade da loja virtual. Responda apenas em JSON." },
+                    { role: "user", content: `Analise a loja: "${url}". Retorne JSON com: trustScore (0-100), registrationAge (string), riskFactors (array de strings), recommendation (string curta).` }
                 ],
                 response_format: { type: "json_object" }
             });
             res.json({ domain, ...JSON.parse(response.choices[0].message.content) });
         } catch (err) {
+            console.error('Check Store Error:', err);
             res.status(500).json({ error: 'Erro ao analisar loja.' });
+        }
+    });
+
+    // GET /api/check-item (Phase 3 - PIX, Phone)
+    router.get('/check-item', optionalAuthenticateToken, async (req, res) => {
+        const { value, type } = req.query;
+        if (!value || !type) return res.status(400).json({ error: 'Valor e tipo são necessários.' });
+
+        try {
+            // Verificar padrões conhecidos no banco
+            const { data: patterns } = await supabase
+                .from('scam_patterns')
+                .select('*')
+                .eq('pattern_text', value);
+
+            const isReported = patterns && patterns.length > 0;
+            const reportsCount = isReported ? patterns[0].report_count : 0;
+
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    { role: "system", content: "Você é um especialista em análise de fraudes (PIX e Telefone). Responda apenas em JSON." },
+                    { role: "user", content: `Analise o seguinte item do tipo ${type}: "${value}". Histórico de denúncias: ${reportsCount}. Retorne JSON com: score (0-100, onde 100 é golpe certo), status (string), reportedTimes (number), signals (array de strings), recommendation (string).` }
+                ],
+                response_format: { type: "json_object" }
+            });
+
+            const result = JSON.parse(response.choices[0].message.content);
+            // Garantir que o contador de denúncias do banco seja levado em conta
+            result.reportedTimes = Math.max(result.reportedTimes || 0, reportsCount);
+            if (reportsCount > 0) result.score = Math.max(result.score, 70);
+
+            res.json(result);
+        } catch (err) {
+            console.error('Check Item Error:', err);
+            res.status(500).json({ error: 'Erro ao analisar item.' });
+        }
+    });
+
+    // POST /api/expand-url (Phase 3)
+    router.get('/expand-url', optionalAuthenticateToken, async (req, res) => {
+        const { url } = req.query;
+        if (!url) return res.status(400).json({ error: 'URL necessária.' });
+
+        try {
+            // Simulação de expansão e análise
+            const response = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    { role: "system", content: "Você é um especialista em segurança digital. Responda apenas em JSON." },
+                    { role: "user", content: `Analise este link possivelmente encurtado ou malicioso: "${url}". Retorne JSON com: expandedUrl (string), analysis (object com trustScore, riskFactors, recommendation).` }
+                ],
+                response_format: { type: "json_object" }
+            });
+            res.json(JSON.parse(response.choices[0].message.content));
+        } catch (err) {
+            res.status(500).json({ error: 'Erro ao expandir link.' });
         }
     });
 
