@@ -97,14 +97,20 @@ const optionalAuthenticateToken = (req, res, next) => {
 const checkQuota = async (req, res, next) => {
     const userId = req.user ? req.user.id : null;
     const plan = req.user ? req.user.plan : 'FREE';
-    if (plan === 'PREMIUM' || plan === 'BUSINESS' || plan === 'PRO') return next();
 
-    if (plan === 'FREE') {
+    // Admins e usuários pagos têm cota ilimitada
+    if (plan === 'PREMIUM' || plan === 'BUSINESS' || plan === 'PRO' || plan === 'ADMIN') return next();
+
+    // Cota para usuários logados no plano FREE
+    if (plan === 'FREE' && userId) {
         const today = new Date().toISOString().split('T')[0];
         const { count } = await supabase.from('reports').select('*', { count: 'exact', head: true }).eq('user_id', userId).gte('timestamp', today);
         if (count >= 3) return res.status(429).json({ error: 'Cota diária atingida', limitReached: true });
         return next();
     }
+
+    // Se for anônimo (userId null), permitimos passar por enquanto para não travar a demo
+    // Ou poderíamos implementar um limite por IP (req.ip)
     next();
 };
 
@@ -159,7 +165,7 @@ app.use(express.urlencoded({ extended: false }));
 // --- Modular Routes ---
 const authRoutes = require('./routes/auth')(supabase, JWT_SECRET, authenticateToken, resend);
 const analyzeRoutes = require('./routes/analyze')(supabase, openai, optionalAuthenticateToken, checkQuota, upload);
-const intelligenceRoutes = require('./routes/intelligence')(supabase, authenticateToken);
+const intelligenceRoutes = require('./routes/intelligence')(supabase, authenticateToken, openai);
 const b2bRoutes = require('./routes/b2b')(supabase, authenticateToken, openai);
 const familyRoutes = require('./routes/family')(supabase, authenticateToken);
 const extensionRoutes = require('./routes/extension')(supabase, optionalAuthenticateToken);
