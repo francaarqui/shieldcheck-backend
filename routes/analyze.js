@@ -53,10 +53,10 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
 
         if (baseResult.score > 60) {
             baseResult.status = 'ALTO RISCO';
-            baseResult.recommendation = 'Evite clicar em links ou fornecer informações pessoais. Há alta probabilidade de fraude baseada também em alertas de outros usuários.';
+            baseResult.recommendation = '⚠️ ALERTA DE SEGURANÇA: Nossa análise identificou múltiplos vetores de ataque e padrões de engenharia social conhecidos. Recomenda-se o bloqueio imediato e não compartilhamento de dados sensíveis.';
         } else if (baseResult.score > 30) {
-            baseResult.status = 'Conteúdo Suspeito';
-            baseResult.recommendation = 'O conteúdo apresenta características dúbias e assemelha-se a alertas comunitários.';
+            baseResult.status = 'Consistência Duvidosa';
+            baseResult.recommendation = 'ANÁLISE DE ATENÇÃO: Foram detectados sinais de alerta que, embora não conclusivos, assemelham-se a táticas de persuasão usadas por golpistas. Proceda com cautela extrema.';
         }
 
         if (baseResult.signals.length > 1 && baseResult.signals[0] === "Nenhum padrão malicioso conhecido foi detectado.") {
@@ -104,10 +104,18 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
         const { text } = req.body;
         try {
             const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
+                model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um especialista em visão computacional e fraude. Analise o texto OCR de um print." },
-                    { role: "user", content: `Analise este texto extraído de um print de tela suspeito: "${text}". Retorne JSON com: isScam (bool), confidence (0-100), riskFactors (array), advice (string).` }
+                    { role: "system", content: "Você é um Perito em Fraudes Documentais e Fraude de Boletos Bancários. Sua função é analisar textos extraídos por OCR e identificar discrepâncias fiscais, erros de digitação em campos críticos e padrões de boletos falsos." },
+                    {
+                        role: "user", content: `Analise este texto extraído de um documento/boleto: "${text}". 
+                    Verifique:
+                    - Consistência entre o nome do beneficiário e o CPF/CNPJ.
+                    - Formatação de códigos de barras (se presentes em texto).
+                    - Termos comuns em golpes (ex: 'Agência e Código do Cedente' divergentes).
+                    - Veracidade aparente de datas e valores expressos.
+
+                    Retorne EXCLUSIVAMENTE um objeto JSON: { isScam (bool), confidence (0-100), riskFactors (array com justificativas técnicas), advice (veredito final do perito) }.` }
                 ],
                 response_format: { type: "json_object" }
             });
@@ -127,10 +135,21 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const domain = domainMatch ? domainMatch[1] : url;
 
             const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
+                model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um especialista em segurança de e-commerce. Analise a confiabilidade da loja virtual. Responda apenas em JSON." },
-                    { role: "user", content: `Analise a loja: "${url}". Retorne JSON com: trustScore (0-100), registrationAge (string), riskFactors (array de strings), recommendation (string curta).` }
+                    { role: "system", content: "Você é um Especialista de Segurança de Elite com foco em Threat Intelligence e E-commerce Fraud. Sua missão é realizar uma auditoria técnica profunda e implacável em domínios." },
+                    {
+                        role: "user", content: `Analise a loja/domínio: "${url}". 
+                    Considere os seguintes vetores de análise:
+                    1. Reputação do domínio (simule consulta WHOIS, idade, proprietário).
+                    2. Certificados SSL (simule validação de CA, expiração, tipo de criptografia).
+                    3. Presença em Blacklists globais de phishing e malware.
+                    4. Padrões de infraestrutura (servidores conhecidos por hospedar fraudes, IPs suspeitos).
+                    5. Consistência de marca (simule checagem de typosquatting).
+
+                    Seja extremamente detalhado e técnico. Use termos como 'Entropia de URL', 'DMARC/SPF fail', 'SSL Handshake vulnerability' se aplicável.
+
+                    Retorne EXCLUSIVAMENTE um objeto JSON: { trustScore (0-100), registrationAge (string detalhada), riskFactors (array de strings técnicas), recommendation (veredito robusto e autoritário) }.` }
                 ],
                 response_format: { type: "json_object" }
             });
@@ -157,10 +176,21 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const reportsCount = isReported ? patterns[0].report_count : 0;
 
             const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
+                model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um especialista em análise de fraudes (PIX e Telefone). Responda apenas em JSON." },
-                    { role: "user", content: `Analise o seguinte item do tipo ${type}: "${value}". Histórico de denúncias: ${reportsCount}. Retorne JSON com: score (0-100, onde 100 é golpe certo), status (string), reportedTimes (number), signals (array de strings), recommendation (string).` }
+                    { role: "system", content: "Você é um Analista de Deep Web e Fraude Transacional Senior. Você investiga chaves PIX e Números de Telefone em busca de vazamentos de dados, atividades ilícitas e padrões de crime organizado." },
+                    {
+                        role: "user", content: `Investigue o seguinte item do tipo ${type}: "${value}".
+                    Histórico interno de denúncias: ${reportsCount}.
+
+                    Parâmetros de Auditoria:
+                    - Padrões sintáticos de chaves aleatórias usadas em golpes automatizados.
+                    - Cruzamento com formatos conhecidos de CPFs vazados.
+                    - Geolocalização de DDDs com alta incidência de 'Telemarketing Predatório' ou 'Golpe do WhatsApp'.
+                    - Simulacro de presença em fóruns de vazamento e bancos de dados de spammers.
+
+                    Seja técnico e direto.
+                    Retorne EXCLUSIVAMENTE um objeto JSON: { score (0-100 onde 100 é crime certo), status (string técnica), reportedTimes (number), signals (array de strings sobre descobertas técnicas), recommendation (decisão de segurança final) }.` }
                 ],
                 response_format: { type: "json_object" }
             });
@@ -185,14 +215,21 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
         try {
             // Simulação de expansão e análise
             const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
+                model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um especialista em segurança digital. Responda apenas em JSON." },
-                    { role: "user", content: `Analise este link possivelmente encurtado ou malicioso: "${url}". Retorne JSON com: expandedUrl (string), analysis (object com trustScore, riskFactors, recommendation).` }
+                    { role: "system", content: "Você é um Especialista em Análise de Malware e URLs. Seu trabalho é dissecar links encurtados e identificar redirecionamentos maliciosos (Open Redirects) e páginas de Phishing de Credenciais." },
+                    {
+                        role: "user", content: `Expanda e analise este link: "${url}". 
+                    Identifique:
+                    - O destino final provável.
+                    - Se o serviço de encurtamento é legítimo ou abusado por criminosos.
+                    - Presença de parâmetros de rastreamento malicioso (UTMs forjadas).
+                    - Risco de Drive-by Download no destino.
+
+                    Retorne EXCLUSIVAMENTE um objeto JSON: { expandedUrl (string), analysis: { trustScore, riskFactors (array técnico), recommendation (string autoritária) } }.` }
                 ],
                 response_format: { type: "json_object" }
             });
-            res.json(JSON.parse(response.choices[0].message.content));
         } catch (err) {
             res.status(500).json({ error: 'Erro ao expandir link.' });
         }
