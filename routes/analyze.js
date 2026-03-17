@@ -140,21 +140,19 @@ module.exports = function (supabase, openai, optionalAuthenticateToken, checkQuo
             const response = await openai.chat.completions.create({
                 model: "gpt-4o",
                 messages: [
-                    { role: "system", content: "Você é um Especialista de Segurança de Elite com foco em Threat Intelligence e E-commerce Fraud. Sua missão é realizar uma auditoria técnica profunda. IMPORTANTE: Seja 100% factual. Se um dado não estiver no contexto, diga que não foi possível verificar. NUNCA invente idade de registro, proprietários ou métricas exatas se não as tiver." },
+                    { role: "system", content: "Você é um Especialista de Segurança Forense do ShieldCheck AI. Sua missão é analisar dados técnicos REAIS. IMPORTANTE: Use APENAS os dados fornecidos no CONTEXTO TÉCNICO para afirmar fatos. Se o SSL estiver como 'valid: true' no contexto, NUNCA diga que ele é inválido. Se os nameservers não forem 'hostgator', NUNCA mencione hostgator. Se você não tiver a data exata de registro no contexto, diga 'Informação técnica pendente' ou 'Domínio recém-identificado', mas NUNCA invente anos ou meses." },
                     {
-                        role: "user", content: `Realize uma auditoria técnica completa no domínio: "${url}". 
+                        role: "user", content: `AUDITORIA TÉCNICA DE ELITE: "${url}". 
                     
-                    DADOS TÉCNICOS EM TEMPO REAL (CONTEXTO):
+                    CONTEXTO TÉCNICO (FATOS REAIS):
                     - DNS: ${JSON.stringify(networkData.dns)}
                     - SSL: ${JSON.stringify(networkData.ssl)}
                     
-                    VETORES DE INVESTIGAÇÃO:
-                    - WHOIS: Analise idade aparente (se disponível em base de conhecimento ou contexto). SE O DOMÍNIO FOR RECENTE E NÃO ESTIVER NA BASE, admita que é um domínio novo ou desconhecido.
-                    - SSL: Verifique o emissor e validade no contexto fornecido.
-                    - DNS & HEADERS: Use os registros DNS fornecidos para avaliar a robustez.
-                    - TYPOSQUATTING: Identifique se tenta imitar marcas famosas.
-
-                    REGRA DE OURO: Se o domínio for novo (ex: criado há poucos dias), o TrustScore deve ser baixo. Não invente que ele tem 2 anos se você não tiver certeza absoluta.
+                    MISSÃO:
+                    1. Analise se os registros DNS sugerem uma infraestrutura amadora ou profissional (Ver Vercel, Cloudflare, etc).
+                    2. Valide o SSL com base no emissor (Issuer) fornecido.
+                    3. Se o TrustScore for baixo, explique que é pelo fato de o domínio ser MUITO NOVO ou ter pouca reputação técnica associada, e não por mentiras sobre sua idade.
+                    4. Seja extremamente cuidadoso: o usuário muitas vezes testa o próprio site legítimo. Não o acuse de fraude se os dados técnicos (SSL válido, DNS corrigido) mostrarem o contrário.
 
                     Retorne um JSON detalhado: { trustScore (0-100), registrationAge (ex: "Não disponível" ou idade real), riskFactors (array de strings técnicas), recommendation (veredito técnico detalhado) }.` }
                 ],
